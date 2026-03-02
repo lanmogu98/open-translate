@@ -1,12 +1,12 @@
 # Developer Guide
 
-This document outlines the architecture, coding standards, and documentation maintenance protocols for the **Immersive Translate Clone** project.
+This document outlines the architecture, coding standards, and documentation maintenance protocols for the **Open Translate** project.
 
 ## Purpose & Development Model
 
 1.  **Agent-first development (95%+)**: This product is developed **95%+** by LLM agents. Humans focus on product direction; design, implementation, and tests are produced by the agents.
 2.  **Primary purpose of this guide**: Provide interested developers a **fast, high-signal entrypoint** to understand the project's current state (architecture, constraints, and how to run/verify).
-3.  **Evolving workflow contract**: Agent work in this repo is constrained by an evolving skill specification: [lanmogu98/dev-workflow](https://github.com/lanmogu98/dev-workflow).
+3.  **Evolving workflow contract**: Agent work in this repo is managed via centralized skills at `~/.claude/skills/`.
 
 ## Project Structure
 

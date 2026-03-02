@@ -3,8 +3,9 @@ node_modules/
 *.log
 .idea/
 .vscode/
-AGENTS.md
-immersive_translate_clone.code-workspace
+.cursor/
+*.code-workspace
+.claude/settings.json
 icons/imagen-*.png
 
 # Generated config files (from llm_config.yml)

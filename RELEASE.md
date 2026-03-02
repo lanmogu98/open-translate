@@ -97,7 +97,7 @@ This creates `dist/open-translate-v0.2.0.zip`.
 
 ### 7. Create GitHub Release
 
-1. Go to: https://github.com/YOUR_USERNAME/immersive-translate-clone/releases/new
+1. Go to the [New Release page](https://github.com/lanmogu98/open-translate/releases/new)
 2. Select the tag you just pushed (e.g., `v0.2.0`)
 3. Title: `v0.2.0`
 4. Description: Copy the changelog section for this version

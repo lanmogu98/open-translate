@@ -1,0 +1,19 @@
+#!/bin/sh
+# Pre-commit hook: verify CLAUDE.md mirrors AGENTS.md.
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+AGENTS="$REPO_ROOT/AGENTS.md"
+CLAUDE="$REPO_ROOT/CLAUDE.md"
+
+# Skip if either file is missing (e.g. not yet created)
+[ -f "$AGENTS" ] && [ -f "$CLAUDE" ] || exit 0
+
+# CLAUDE.md layout: line 1 = HTML comment, line 2 = blank, line 3+ = AGENTS.md content
+CLAUDE_BODY="$(tail -n +3 "$CLAUDE")"
+AGENTS_BODY="$(cat "$AGENTS")"
+
+if [ "$CLAUDE_BODY" != "$AGENTS_BODY" ]; then
+  echo "ERROR: CLAUDE.md is out of sync with AGENTS.md" >&2
+  echo "Fix:   sh scripts/sync-claude-md.sh && git add CLAUDE.md" >&2
+  exit 1
+fi

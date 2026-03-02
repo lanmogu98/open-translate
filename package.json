@@ -1,12 +1,13 @@
 {
-  "name": "immersive-translate-clone",
+  "name": "open-translate",
   "version": "0.1.1",
   "private": true,
-  "description": "Test suite for the Immersive Translate Clone Chrome extension",
+  "description": "Open Translate — immersive bilingual translation Chrome extension",
   "engines": {
     "node": ">=18"
   },
   "scripts": {
+    "prepare": "git config core.hooksPath scripts/hooks",
     "build:config": "node scripts/build-config.js",
     "pretest": "npm run build:config",
     "test": "jest",

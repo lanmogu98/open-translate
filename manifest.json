@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Immersive Translate Clone",
+  "name": "Open Translate",
   "version": "0.1.1",
   "description": "A clone of Immersive Translate with local LLM support and PDF translation.",
   "content_security_policy": {
@@ -22,7 +22,7 @@
   ],
   "action": {
     "default_popup": "src/popup/popup.html",
-    "default_title": "Immersive Translate Clone",
+    "default_title": "Open Translate",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png"

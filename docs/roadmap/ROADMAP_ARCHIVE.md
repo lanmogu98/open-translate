@@ -4,7 +4,45 @@ This file preserves historical roadmap content that was previously kept in `FUTU
 
 For the current, high-signal task list, see `FUTURE_ROADMAP.md`.
 
-Archived on: 2026-01-08
+Last updated: 2026-03-02
+
+---
+
+## Archived from FUTURE_ROADMAP.md (2026-03-02)
+
+| ID | Priority | Item | Status |
+| --- | --- | --- | --- |
+| 47 | P1 | Per-model temperature配置: UI + 存储 + 请求透传 | ✅ Done |
+| 48 | P1 | 默认翻译风格对齐"媒体风格专家"样本 | ✅ Done |
+| 49 | P2 | Advanced收纳: style prompt + exclusions 移入Advanced | ✅ Done |
+| 50 | P2 | Custom Endpoint 才显示 API BaseURL/Model ID | ✅ Done |
+| 31a | P1 | Batch size configuration: increase default from 5→10, add Settings UI | ✅ Done |
+| 46 | P1 | DOM Layout Test System: 解决中英段落排布问题 | ✅ Done |
+| 38 | P0 | XSS防护: 富文本渲染时消毒DOM克隆元素的危险属性 | ✅ Done |
+| 39 | P1 | XSS防护: 使用textContent替代innerHTML | ✅ Done |
+| 40 | P1 | 输入验证: CSS选择器白名单验证 | ✅ Done |
+| 41 | P1 | 输入验证: 批量大小(batchSize)后端验证 | ✅ Done |
+| 42 | P2 | 错误处理: API错误信息脱敏 | ✅ Done |
+| 43 | P2 | CSP配置: manifest.json Content Security Policy | ✅ Done |
+| 44 | P2 | URL验证增强: API端点验证防止SSRF | ✅ Done |
+| 37 | P1 | Fix duplicate translation (custom element case sensitivity) | ✅ Done |
+| 30 | P2 | Update extension icon | ✅ Done |
+| 29 | P0 | Duplicate translation in list items | ✅ Done |
+| 32 | P0 | PDF viewer hijacks browser | ✅ Done |
+| 26 | P1 | Skip `<style>` tags | ✅ Done |
+| 27 | P1 | Skip math elements | ✅ Done |
+| 25 | P1 | Prompt injection 防护 | ✅ Done |
+| 16 | P1 | Preserve rich text formatting | ✅ Done |
+| 19 | P1 | Replace brittle min-length heuristic | ✅ Done |
+| 21 | P1 | Model selection driven by llm_config.yml | ✅ Done |
+| 22 | P2 | Prompt migration exact match | ✅ Done |
+| 23 | P2 | Exclusion tests cover real implementation | ✅ Done |
+| 24 | P2 | extractTextNodes whitespace semantics | ✅ Done |
+| 12 | P3 | Source language detection | ✅ Done |
+
+---
+
+Initial archive: 2026-01-08
 
 ---
 
@@ -224,17 +262,17 @@ This document tracks identified issues and planned improvements for the Immersiv
 | 9 | Inconsistent defaults | P2 | ✅ Fixed |
 | 10 | Magic numbers | P2 | ✅ Fixed |
 | 11 | Hardcoded language | P3 | ✅ Fixed |
-| 12 | No language detection | P3 | 🔲 Pending |
+| 12 | No language detection | P3 | ✅ Fixed |
 | 13 | No caching | P3 | 🔲 Pending |
 | 14 | No exclusion list | P3 | ✅ Fixed |
 | 15 | Extension icon/avatar not configured | P2 | ✅ Fixed |
-| 16 | Preserve rich text formatting in translated output | P1 | 🔲 Pending |
+| 16 | Preserve rich text formatting in translated output | P1 | ✅ Fixed |
 | 17 | Separate protocol/system prompt from user translation prompt | P1 | ✅ Fixed |
 | 18 | Built-in model presets (auto endpoint/params) | P1 | ✅ Fixed |
-| 19 | Replace brittle min-length heuristic to avoid missing short texts | P1 | 🔲 Pending |
+| 19 | Replace brittle min-length heuristic to avoid missing short texts | P1 | ✅ Fixed |
 | 20 | Settings UI redesign (modern + scalable) | P2 | ✅ Fixed |
-| 21 | Model selection driven by llm_config.yml (single source of truth) | P1 | 🔲 Pending |
-| 22 | Prompt migration should use exact old-default match | P2 | 🔲 Pending |
-| 23 | Exclusion tests should cover real implementation | P2 | 🔲 Pending |
-| 24 | Clarify extractTextNodes whitespace semantics | P2 | 🔲 Pending |
+| 21 | Model selection driven by llm_config.yml (single source of truth) | P1 | ✅ Fixed |
+| 22 | Prompt migration should use exact old-default match | P2 | ✅ Fixed |
+| 23 | Exclusion tests should cover real implementation | P2 | ✅ Fixed |
+| 24 | Clarify extractTextNodes whitespace semantics | P2 | ✅ Fixed |
 

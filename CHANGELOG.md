@@ -93,6 +93,8 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+<!-- Note: Version was reset from 1.0.0 to 0.x.y to reflect experimental status (see RELEASE.md) -->
+
 ## [1.0.0] - 2025-12-25
 
 ### Security

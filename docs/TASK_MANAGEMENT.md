@@ -83,13 +83,13 @@ This system is intentionally “GitHub Issues–like”, but file-based.
 
 ---
 
-## Why this helps the Skills workflow
+## Why this structure matters
 
-When turning “Engineering Guide → Skills”, the skill instructions should reference **stable contracts** (files + reading order), not volatile task lists.
+The task system references **stable contracts** (files + reading order), not volatile task lists.
 
 This avoids the failure mode where:
 - tasks change daily
-- skill prompt content becomes outdated
+- agent instructions become outdated
 - agents waste context budget reading large, low-signal history
 
 ---
