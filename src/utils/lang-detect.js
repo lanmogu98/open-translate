@@ -13,33 +13,44 @@
 // Primary CJK Unified Ideographs: U+4E00-U+9FFF
 // CJK Extension A: U+3400-U+4DBF
 const CJK_PATTERN = /[\u4e00-\u9fff\u3400-\u4dbf]/g;
+const LANGUAGE_CHAR_PATTERN = /[A-Za-z\u4e00-\u9fff\u3400-\u4dbf]/g;
+const DEFAULT_CJK_THRESHOLD = 0.6;
+
+function getCJKThreshold(options) {
+    const value = options && options.cjkThreshold;
+    const parsed = typeof value === 'number' ? value : parseFloat(value);
+    if (!Number.isFinite(parsed) || parsed <= 0 || parsed > 1) {
+        return DEFAULT_CJK_THRESHOLD;
+    }
+    return parsed;
+}
 
 /**
  * Detect the language of a text string
  * Uses simple CJK character ratio to determine if text is Chinese
  * 
  * @param {string} text - Text to analyze
+ * @param {Object} [options] - Detection options
+ * @param {number} [options.cjkThreshold=0.6] - CJK ratio needed to classify as Chinese
  * @returns {string} 'zh' for Chinese, 'other' for everything else
  */
-function detectLanguage(text) {
+function detectLanguage(text, options = {}) {
     if (!text || typeof text !== 'string') {
         return 'other';
     }
     
-    // Normalize: remove whitespace for ratio calculation
-    const normalized = text.replace(/\s/g, '');
+    const languageChars = text.match(LANGUAGE_CHAR_PATTERN) || [];
     
-    if (normalized.length === 0) {
+    if (languageChars.length === 0) {
         return 'other';
     }
     
     // Count CJK characters
-    const matches = normalized.match(CJK_PATTERN) || [];
-    const cjkRatio = matches.length / normalized.length;
+    const matches = text.match(CJK_PATTERN) || [];
+    const cjkRatio = matches.length / languageChars.length;
     
-    // Threshold: if more than 30% of characters are CJK, consider it Chinese
-    // This handles technical docs that mix Chinese with English terms
-    if (cjkRatio > 0.3) {
+    // Threshold: only skip when the segment is mostly CJK.
+    if (cjkRatio >= getCJKThreshold(options)) {
         return 'zh';
     }
     
@@ -51,10 +62,17 @@ function detectLanguage(text) {
  * 
  * @param {string} text - Text to check
  * @param {string} targetLang - Target language code (default: 'zh')
+ * @param {Object} [options] - Language gate options
+ * @param {boolean} [options.enabled=true] - Whether language gating is active
+ * @param {number} [options.cjkThreshold=0.6] - CJK ratio needed to classify as Chinese
  * @returns {boolean} True if translation should be skipped
  */
-function shouldSkipTranslation(text, targetLang = 'zh') {
-    const detected = detectLanguage(text);
+function shouldSkipTranslation(text, targetLang = 'zh', options = {}) {
+    if (options && options.enabled === false) {
+        return false;
+    }
+
+    const detected = detectLanguage(text, options);
     
     // Simple matching: if detected language matches target, skip
     // For now, we only detect 'zh' vs 'other'
@@ -78,20 +96,21 @@ function getCJKRatio(text) {
         return 0;
     }
     
-    const normalized = text.replace(/\s/g, '');
-    if (normalized.length === 0) {
+    const languageChars = text.match(LANGUAGE_CHAR_PATTERN) || [];
+    if (languageChars.length === 0) {
         return 0;
     }
     
-    const matches = normalized.match(CJK_PATTERN) || [];
-    return matches.length / normalized.length;
+    const matches = text.match(CJK_PATTERN) || [];
+    return matches.length / languageChars.length;
 }
 
 // Export for both browser (globalThis) and Node.js (module.exports)
 const LangDetect = {
     detectLanguage,
     shouldSkipTranslation,
-    getCJKRatio
+    getCJKRatio,
+    DEFAULT_CJK_THRESHOLD
 };
 
 // Node.js / Jest support
@@ -103,4 +122,3 @@ if (typeof module !== 'undefined' && module.exports) {
 if (typeof globalThis !== 'undefined') {
     globalThis.LangDetect = LangDetect;
 }
-

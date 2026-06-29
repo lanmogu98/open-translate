@@ -7,24 +7,33 @@
  * 3. Interactive elements (buttons, inputs) are skipped
  * 4. User configuration options work correctly
  * 
- * IMPORTANT: jsdom doesn't properly support offsetParent and innerText.
- * All tests that use getTranslatableElements() must mock these properties.
+ * IMPORTANT: jsdom doesn't compute layout.
+ * All tests that use getTranslatableElements() must mock visible geometry.
  */
 
 const { DOMUtils } = require('../src/utils/dom-utils.js');
 
 /**
- * Helper to make elements "visible" in jsdom
- * jsdom defaults offsetParent to null, which makes visibility checks fail
+ * Helper to make elements "visible" in jsdom.
+ * jsdom defaults getBoundingClientRect() to zero dimensions.
  */
-function makeVisible(element) {
-  Object.defineProperty(element, 'offsetParent', { 
-    value: document.body,
-    writable: true,
-    configurable: true
-  });
-  Object.defineProperty(element, 'innerText', { 
-    get() { return this.textContent; },
+function makeVisible(element, options = {}) {
+  if (options.offsetParent !== false) {
+    Object.defineProperty(element, 'offsetParent', {
+      value: document.body,
+      writable: true,
+      configurable: true
+    });
+  }
+  Object.defineProperty(element, 'getBoundingClientRect', {
+    value: () => ({
+      width: options.width ?? 120,
+      height: options.height ?? 24,
+      top: 0,
+      left: 0,
+      right: options.width ?? 120,
+      bottom: options.height ?? 24,
+    }),
     configurable: true
   });
 }
@@ -472,11 +481,11 @@ describe('DOMUtils - Smart Filtering (shouldTranslate)', () => {
   });
 
   describe('visibility checks', () => {
-    test('should skip elements with offsetParent === null (hidden)', () => {
+    test('should skip elements with zero visible geometry', () => {
       const p = document.createElement('p');
       p.textContent = 'This text is hidden from view';
       document.body.appendChild(p);
-      // Don't call makeVisible - leave offsetParent as null
+      // Don't call makeVisible - leave geometry as zero
       
       const elements = DOMUtils.getTranslatableElements();
       expect(elements.find(e => e.element === p)).toBeUndefined();
@@ -490,6 +499,34 @@ describe('DOMUtils - Smart Filtering (shouldTranslate)', () => {
       
       const elements = DOMUtils.getTranslatableElements();
       expect(elements.find(e => e.element === p)).toBeDefined();
+    });
+
+    test('should include position fixed elements when geometry is visible', () => {
+      const p = document.createElement('p');
+      p.style.position = 'fixed';
+      p.textContent = 'Fixed text is visible and should be translated';
+      document.body.appendChild(p);
+      makeVisible(p, { offsetParent: false });
+
+      const elements = DOMUtils.getTranslatableElements();
+      expect(elements.find(e => e.element === p)).toBeDefined();
+    });
+
+    test('should use normalized textContent instead of empty innerText', () => {
+      const p = document.createElement('p');
+      p.innerHTML = '<span hidden>Deferred    article\ncontent should still be scanned.</span>';
+      document.body.appendChild(p);
+      makeVisible(p);
+      Object.defineProperty(p, 'innerText', {
+        get() { return ''; },
+        configurable: true
+      });
+
+      const elements = DOMUtils.getTranslatableElements();
+      const result = elements.find(e => e.element === p);
+
+      expect(result).toBeDefined();
+      expect(result.text).toBe('Deferred article content should still be scanned.');
     });
   });
 

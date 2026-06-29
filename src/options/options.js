@@ -84,6 +84,14 @@ const joinMultilineList = (arr) => {
     return '';
 };
 
+const normalizeLanguageGateCJKThreshold = (value) => {
+    const parsed = typeof value === 'number' ? value : parseFloat(value);
+    if (!Number.isFinite(parsed) || parsed <= 0 || parsed > 1) {
+        return DEFAULT_CONFIG.languageGateCJKThreshold;
+    }
+    return parsed;
+};
+
 // Shows status message
 const showStatus = (message, isError = false) => {
     const status = document.getElementById('status');
@@ -108,6 +116,10 @@ const DEFAULT_CONFIG = {
     modelTemperatures: {},
     excludedDomains: [],
     excludedSelectors: [],
+    translateAside: false,
+    translateHeaderFooter: false,
+    languageGateEnabled: true,
+    languageGateCJKThreshold: 0.6,
 
     // Per-provider API keys storage (Bug 3 fix)
     providerApiKeys: {},
@@ -369,6 +381,22 @@ const restoreOptions = () => {
         // Exclusions
         getEl('excludedDomains').value = joinMultilineList(items.excludedDomains);
         getEl('excludedSelectors').value = joinMultilineList(items.excludedSelectors);
+        const translateAsideEl = getEl('translateAside');
+        if (translateAsideEl) {
+            translateAsideEl.checked = items.translateAside ?? DEFAULT_CONFIG.translateAside;
+        }
+        const translateHeaderFooterEl = getEl('translateHeaderFooter');
+        if (translateHeaderFooterEl) {
+            translateHeaderFooterEl.checked = items.translateHeaderFooter ?? DEFAULT_CONFIG.translateHeaderFooter;
+        }
+        const languageGateEnabledEl = getEl('languageGateEnabled');
+        if (languageGateEnabledEl) {
+            languageGateEnabledEl.checked = items.languageGateEnabled ?? DEFAULT_CONFIG.languageGateEnabled;
+        }
+        const languageGateThresholdEl = getEl('languageGateCJKThreshold');
+        if (languageGateThresholdEl) {
+            languageGateThresholdEl.value = normalizeLanguageGateCJKThreshold(items.languageGateCJKThreshold);
+        }
 
         // Compatibility fields
         getEl('apiUrl').value = items.apiUrl || DEFAULT_CONFIG.apiUrl;
@@ -396,6 +424,13 @@ const saveOptions = () => {
     const excludedDomains = parseMultilineList(getEl('excludedDomains')?.value || '');
     const excludedSelectors = parseMultilineList(getEl('excludedSelectors')?.value || '');
     const batchSize = parseInt(getEl('batchSize')?.value, 10) || DEFAULT_CONFIG.batchSize;
+    const translateAsideEl = getEl('translateAside');
+    const translateHeaderFooterEl = getEl('translateHeaderFooter');
+    const languageGateEnabledEl = getEl('languageGateEnabled');
+    const translateAside = translateAsideEl ? translateAsideEl.checked : DEFAULT_CONFIG.translateAside;
+    const translateHeaderFooter = translateHeaderFooterEl ? translateHeaderFooterEl.checked : DEFAULT_CONFIG.translateHeaderFooter;
+    const languageGateEnabled = languageGateEnabledEl ? languageGateEnabledEl.checked : DEFAULT_CONFIG.languageGateEnabled;
+    const languageGateCJKThreshold = normalizeLanguageGateCJKThreshold(getEl('languageGateCJKThreshold')?.value);
 
     let temperature = resolveTemperatureForSelection(providerId, modelId);
     if (temperatureEl && temperatureEl.value !== '') {
@@ -444,6 +479,10 @@ const saveOptions = () => {
             modelTemperatures,
             excludedDomains,
             excludedSelectors,
+            translateAside,
+            translateHeaderFooter,
+            languageGateEnabled,
+            languageGateCJKThreshold,
             providerApiKeys, // Save per-provider keys (Bug 3 fix)
             batchSize, // Issue 31a
         },

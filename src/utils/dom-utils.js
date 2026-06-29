@@ -1,6 +1,6 @@
 class DOMUtils {
     static isBlockElement(el) {
-        const blockTags = ['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI', 'TD', 'DIV', 'BLOCKQUOTE'];
+        const blockTags = ['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI', 'TD', 'DIV', 'SECTION', 'BLOCKQUOTE', 'FIGCAPTION', 'DT', 'DD', 'BODY-TEXT'];
         return blockTags.includes(el.tagName);
     }
 
@@ -19,17 +19,21 @@ class DOMUtils {
         const excludedSelectors = (options && Array.isArray(options.excludedSelectors)) ? options.excludedSelectors : [];
         const targetLanguage = options && typeof options.targetLanguage === 'string' ? options.targetLanguage : undefined;
         const translateNavigation = options && options.translateNavigation === true;
+        const translateAside = options && options.translateAside === true;
+        const translateHeaderFooter = options && options.translateHeaderFooter === true;
         const translateShortTexts = options && options.translateShortTexts === true;
+        const languageGateEnabled = !(options && options.languageGateEnabled === false);
+        const languageGateCJKThreshold = this.normalizeCJKThresholdOption(options && options.languageGateCJKThreshold);
 
         const DEFAULT_MIN_LEN = translateShortTexts ? 1 : 8;
         const MAIN_MIN_LEN = 3;
         // Enhanced selector to include lists, blockquotes, captions, and custom elements
         // body-text: Used by sites like The Economist (SvelteKit) for article content
-        const candidates = document.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, blockquote, td, div, figcaption, dt, dd, body-text');
+        const candidates = document.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, blockquote, td, div, section, figcaption, dt, dd, body-text');
 
         for (const element of candidates) {
             // Basic visibility check
-            if (element.offsetParent === null) continue;
+            if (!this.isVisible(element)) continue;
 
             // Prevent translating our own elements
             if (element.classList.contains('immersive-translate-target')) continue;
@@ -58,7 +62,11 @@ class DOMUtils {
             if (this.isPrimarilyMathContent(element)) continue;
 
             // Issue 19: Skip navigation-ish areas by default (even if long)
-            if (!translateNavigation && this.isInNavigationArea(element)) continue;
+            if (this.shouldSkipNavigationArea(element, {
+                translateNavigation,
+                translateAside,
+                translateHeaderFooter,
+            })) continue;
 
             // Skip navigation bars if possible (simple heuristic: common nav class/id substrings or role)
             // This is hard to get perfect universally without complex logic.
@@ -66,7 +74,9 @@ class DOMUtils {
 
             // Ensure it has direct text content (not just nested elements)
             // This helps avoid translating container divs that just hold other divs
-            if (['DIV', 'LI', 'TD'].includes(element.tagName) && !this.hasDirectText(element)) {
+            if (['DIV', 'LI', 'TD'].includes(element.tagName) &&
+                !this.hasDirectText(element) &&
+                !this.hasInlineOnlyTextContent(element)) {
                 continue;
             }
 
@@ -84,7 +94,7 @@ class DOMUtils {
 
                 // Add each wrapped span as a translatable element
                 for (const span of wrappedSpans) {
-                    const spanText = span.textContent.trim();
+                    const spanText = this.getElementText(span);
                     // Issue 19: Main content has lower min length
                     const spanMinLen = this.isInMainContent(span) ? Math.min(MAIN_MIN_LEN, DEFAULT_MIN_LEN) : DEFAULT_MIN_LEN;
                     if (spanText.length >= spanMinLen && !/^\d+$/.test(spanText)) {
@@ -107,7 +117,7 @@ class DOMUtils {
                 const wrappedSpans = this.wrapBrBrParagraphs(element, descendantMinLen);
 
                 for (const span of wrappedSpans) {
-                    const spanText = span.textContent.trim();
+                    const spanText = this.getElementText(span);
                     const spanMinLen = this.isInMainContent(span) ? Math.min(MAIN_MIN_LEN, descendantMinLen) : descendantMinLen;
                     if (spanText.length >= spanMinLen && !/^\d+$/.test(spanText)) {
                         // Inherit visibility from parent in test environment
@@ -121,7 +131,7 @@ class DOMUtils {
             }
 
             // Normal case: no translatable descendants, use full text content
-            let rawText = (typeof element.innerText === 'string' ? element.innerText : element.textContent || '').trim();
+            let rawText = this.getElementText(element);
             if (!rawText) continue;
 
             // Skip pure numbers
@@ -133,7 +143,11 @@ class DOMUtils {
                 typeof globalThis !== 'undefined' &&
                 globalThis.LangDetect &&
                 typeof globalThis.LangDetect.shouldSkipTranslation === 'function' &&
-                globalThis.LangDetect.shouldSkipTranslation(rawText, targetLanguage)
+                languageGateEnabled &&
+                globalThis.LangDetect.shouldSkipTranslation(rawText, targetLanguage, {
+                    enabled: languageGateEnabled,
+                    cjkThreshold: languageGateCJKThreshold,
+                })
             ) {
                 continue;
             }
@@ -147,6 +161,50 @@ class DOMUtils {
             }
         }
         return elements;
+    }
+
+    static normalizeText(text) {
+        if (!text || typeof text !== 'string') return '';
+        return text.replace(/\s+/g, ' ').trim();
+    }
+
+    static getElementText(element) {
+        return this.normalizeText(element ? element.textContent || '' : '');
+    }
+
+    static normalizeCJKThresholdOption(value) {
+        const parsed = typeof value === 'number' ? value : parseFloat(value);
+        if (!Number.isFinite(parsed) || parsed <= 0 || parsed > 1) return undefined;
+        return parsed;
+    }
+
+    static isVisible(element) {
+        if (!element) return false;
+
+        if (typeof element.checkVisibility === 'function') {
+            try {
+                return element.checkVisibility({
+                    checkOpacity: false,
+                    checkVisibilityCSS: true,
+                    contentVisibilityAuto: true,
+                });
+            } catch (e) {
+                try {
+                    return element.checkVisibility();
+                } catch (fallbackError) {
+                    return false;
+                }
+            }
+        }
+
+        if (typeof element.getBoundingClientRect === 'function') {
+            const rect = element.getBoundingClientRect();
+            if (rect && (rect.width > 0 || rect.height > 0)) {
+                return true;
+            }
+        }
+
+        return element.offsetParent !== null;
     }
 
     static shouldUseRichTextV2(element) {
@@ -163,6 +221,14 @@ class DOMUtils {
 
     static isInNavigationArea(element) {
         return !!(element && element.closest && element.closest('nav, header, footer, aside, [role="navigation"]'));
+    }
+
+    static shouldSkipNavigationArea(element, options = {}) {
+        if (!element || !element.closest || options.translateNavigation) return false;
+        if (element.closest('nav, [role="navigation"]')) return true;
+        if (!options.translateAside && element.closest('aside')) return true;
+        if (!options.translateHeaderFooter && element.closest('header, footer')) return true;
+        return false;
     }
 
     static isInteractiveElement(element) {
@@ -300,6 +366,11 @@ class DOMUtils {
             }
         }
         return false;
+    }
+
+    static hasInlineOnlyTextContent(element) {
+        if (!this.getElementText(element)) return false;
+        return !Array.from(element.querySelectorAll('*')).some((descendant) => this.isBlockElement(descendant));
     }
 
     /**
@@ -481,7 +552,7 @@ class DOMUtils {
             const descendants = element.querySelectorAll(tag);
             for (const desc of descendants) {
                 // Check if descendant has meaningful text content
-                const text = (desc.textContent || '').trim();
+                const text = this.getElementText(desc);
                 if (text.length >= minLen && !/^\d+$/.test(text)) {
                     return true;
                 }
