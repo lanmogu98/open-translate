@@ -545,7 +545,7 @@ class DOMUtils {
         // These are the "semantic" text containers that should be translated as units
         // body-text: Custom element used by sites like The Economist
         // NOTE: Use lowercase for custom elements to ensure cross-browser compatibility
-        const LEAF_CONTAINERS = ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'blockquote', 'figcaption', 'dt', 'dd', 'body-text'];
+        const LEAF_CONTAINERS = ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'blockquote', 'section', 'figcaption', 'dt', 'dd', 'body-text'];
 
         // Check if element contains any leaf containers with significant text
         for (const tag of LEAF_CONTAINERS) {

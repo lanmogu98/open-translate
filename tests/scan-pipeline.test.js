@@ -116,6 +116,24 @@ describe('scan pipeline (Issue 19 + Issue 12)', () => {
       expect(elements.find((e) => e.element.id === 'inlineSection')).toBeDefined();
     });
 
+    test('should not include parent section when child section is selected', () => {
+      document.body.innerHTML = `
+        <main>
+          <section id="outer">
+            <section id="inner"><span>Nested section text should be translated once.</span></section>
+          </section>
+        </main>
+      `;
+      makeAllVisible('main, section, span');
+
+      const elements = DOMUtils.getTranslatableElements({
+        excludedSelectors: [],
+      });
+
+      expect(elements.find((e) => e.element.id === 'outer')).toBeUndefined();
+      expect(elements.find((e) => e.element.id === 'inner')).toBeDefined();
+    });
+
     test('should include short text inside <main> (lower threshold)', () => {
       document.body.innerHTML = `
         <main>
