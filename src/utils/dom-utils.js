@@ -1,6 +1,6 @@
 class DOMUtils {
     static isBlockElement(el) {
-        const blockTags = ['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI', 'TD', 'DIV', 'SECTION', 'BLOCKQUOTE', 'FIGCAPTION', 'DT', 'DD', 'BODY-TEXT'];
+        const blockTags = ['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI', 'UL', 'OL', 'DL', 'TD', 'TR', 'THEAD', 'TBODY', 'TFOOT', 'TABLE', 'DIV', 'SECTION', 'BLOCKQUOTE', 'FIGCAPTION', 'DT', 'DD', 'BODY-TEXT'];
         return blockTags.includes(el.tagName);
     }
 
@@ -90,7 +90,7 @@ class DOMUtils {
             // of including the container itself. This prevents translation positioning issues.
             if (hasDescendants) {
                 // Wrap direct text nodes in spans for independent translation
-                const wrappedSpans = this.wrapDirectTextNodes(element, descendantMinLen);
+                const wrappedSpans = this.wrapDirectTranslatableRuns(element, descendantMinLen);
 
                 // Add each wrapped span as a translatable element
                 for (const span of wrappedSpans) {
@@ -428,6 +428,66 @@ class DOMUtils {
             wrappers.push(span);
         }
 
+        return wrappers;
+    }
+
+    static wrapDirectTranslatableRuns(element, minLen = 3) {
+        const hasSubstantialDirectText = Array.from(element.childNodes).some((node) => {
+            if (node.nodeType !== Node.TEXT_NODE) return false;
+            const text = this.normalizeText(node.textContent || '');
+            return text.length >= minLen && !/^\d+$/.test(text);
+        });
+        if (hasSubstantialDirectText) {
+            return this.wrapDirectTextNodes(element, minLen);
+        }
+
+        const wrappers = [];
+        let run = [];
+
+        const flushRun = () => {
+            if (run.length === 0) return;
+
+            const runText = this.normalizeText(run.map(node => node.textContent || '').join(''));
+            if (runText.length >= minLen && !/^\d+$/.test(runText)) {
+                const span = document.createElement('span');
+                span.className = 'immersive-translate-text-wrapper';
+
+                const firstNode = run[0];
+                firstNode.parentNode.insertBefore(span, firstNode);
+
+                for (const node of run) {
+                    span.appendChild(node);
+                }
+
+                wrappers.push(span);
+            }
+
+            run = [];
+        };
+
+        for (const node of Array.from(element.childNodes)) {
+            if (node.nodeType === Node.TEXT_NODE) {
+                run.push(node);
+                continue;
+            }
+
+            if (
+                node.nodeType === Node.ELEMENT_NODE &&
+                !this.isBlockElement(node) &&
+                !this.isInteractiveElement(node) &&
+                !this.isStyleOrScript(node) &&
+                !this.isMathElement(node) &&
+                node.getAttribute('aria-hidden') !== 'true' &&
+                this.getElementText(node)
+            ) {
+                run.push(node);
+                continue;
+            }
+
+            flushRun();
+        }
+
+        flushRun();
         return wrappers;
     }
 
