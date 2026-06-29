@@ -196,6 +196,8 @@ describe('scan pipeline (Issue 19 + Issue 12)', () => {
       expect(elements.find((e) => e.element.id === 'outer')).toBeUndefined();
       expect(elements.find((e) => e.element.id === 'inner')).toBeDefined();
       expect(elements.find((e) => e.text === '这是一段中文文本用于测试跳过逻辑')).toBeUndefined();
+
+      delete globalThis.LangDetect;
     });
 
     test('should include short text inside <main> (lower threshold)', () => {

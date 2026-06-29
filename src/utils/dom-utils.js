@@ -618,21 +618,28 @@ class DOMUtils {
     static hasTranslatableDescendants(element, minLen = 8) {
         if (!element) return false;
 
-        // Leaf-level containers that are typically translated individually
-        // These are the "semantic" text containers that should be translated as units
-        // body-text: Custom element used by sites like The Economist
-        // NOTE: Use lowercase for custom elements to ensure cross-browser compatibility
-        const LEAF_CONTAINERS = ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'blockquote', 'section', 'figcaption', 'dt', 'dd', 'body-text'];
+        const candidateSelector = 'p, h1, h2, h3, h4, h5, h6, li, blockquote, td, div, section, figcaption, dt, dd, body-text';
 
         // Check if element contains any leaf containers with significant text
-        for (const tag of LEAF_CONTAINERS) {
-            const descendants = element.querySelectorAll(tag);
-            for (const desc of descendants) {
-                // Check if descendant has meaningful text content
-                const text = this.getElementText(desc);
-                if (text.length >= minLen && !/^\d+$/.test(text)) {
-                    return true;
-                }
+        const descendants = element.querySelectorAll(candidateSelector);
+        for (const desc of descendants) {
+            if (desc.getAttribute('aria-hidden') === 'true') continue;
+            if (desc.closest('[aria-hidden="true"]') && !element.matches('[aria-hidden="true"]')) continue;
+            if (this.isInteractiveElement(desc)) continue;
+            if (this.isStyleOrScript(desc)) continue;
+            if (this.isMathElement(desc)) continue;
+            if (this.isPrimarilyMathContent(desc)) continue;
+
+            if (['DIV', 'LI', 'TD'].includes(desc.tagName) &&
+                !this.hasDirectText(desc) &&
+                !this.hasInlineOnlyTextContent(desc)) {
+                continue;
+            }
+
+            // Check if descendant has meaningful text content
+            const text = this.getElementText(desc);
+            if (text.length >= minLen && !/^\d+$/.test(text)) {
+                return true;
             }
         }
 

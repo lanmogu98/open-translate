@@ -255,6 +255,48 @@ describe('Issue 29: Duplicate Translation in List Items', () => {
       expect(elementsContainingItem1[0].element.id).toBe('item1');
     });
 
+    test('div with direct text AND table cell should not duplicate cell text', () => {
+      document.body.innerHTML = `
+        <div id="outer">
+          Intro before table.
+          <table>
+            <tbody>
+              <tr>
+                <td id="cell">Cell text with enough content to translate.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      `;
+      makeAllVisible('div, table, tbody, tr, td');
+
+      const elements = DOMUtils.getTranslatableElements();
+      const cellText = 'Cell text with enough content to translate.';
+      const elementsContainingCell = elements.filter(e => e.text.includes(cellText));
+
+      expect(elementsContainingCell.length).toBe(1);
+      expect(elementsContainingCell[0].element.id).toBe('cell');
+      expect(elements.find(e => e.element.id === 'outer')).toBeUndefined();
+    });
+
+    test('div with direct text AND nested div should not duplicate nested div text', () => {
+      document.body.innerHTML = `
+        <div id="outer">
+          Lead before nested div.
+          <div id="inner">Nested div text with enough content to translate.</div>
+        </div>
+      `;
+      makeAllVisible('div');
+
+      const elements = DOMUtils.getTranslatableElements();
+      const innerText = 'Nested div text with enough content to translate.';
+      const elementsContainingInner = elements.filter(e => e.text.includes(innerText));
+
+      expect(elementsContainingInner.length).toBe(1);
+      expect(elementsContainingInner[0].element.id).toBe('inner');
+      expect(elements.find(e => e.element.id === 'outer')).toBeUndefined();
+    });
+
     test('div with ONLY direct text (no child elements) SHOULD be translated', () => {
       document.body.innerHTML = `
         <div id="text-only">This div has only direct text content, no child elements at all.</div>
