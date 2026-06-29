@@ -154,6 +154,50 @@ describe('scan pipeline (Issue 19 + Issue 12)', () => {
       expect(elements.filter((e) => e.text === 'Parent inline intro should also be translated.')).toHaveLength(1);
     });
 
+    test('should preserve parent section direct text with inline links when child section is selected', () => {
+      document.body.innerHTML = `
+        <main>
+          <section id="outer">
+            Read the <a href="/docs">linked documentation</a>.
+            <section id="inner"><span>Nested section text should be translated once.</span></section>
+          </section>
+        </main>
+      `;
+      makeAllVisible('main, section, a, span');
+
+      const elements = DOMUtils.getTranslatableElements({
+        excludedSelectors: [],
+      });
+
+      expect(elements.find((e) => e.element.id === 'outer')).toBeUndefined();
+      expect(elements.find((e) => e.element.id === 'inner')).toBeDefined();
+      expect(elements.filter((e) => e.text === 'Read the linked documentation.')).toHaveLength(1);
+    });
+
+    test('should apply language gating to wrapped parent inline text', () => {
+      const LangDetect = require('../src/utils/lang-detect.js');
+      globalThis.LangDetect = LangDetect;
+
+      document.body.innerHTML = `
+        <main>
+          <section id="outer">
+            <span>这是一段中文文本用于测试跳过逻辑</span>
+            <section id="inner"><span>Nested English section should still be translated.</span></section>
+          </section>
+        </main>
+      `;
+      makeAllVisible('main, section, span');
+
+      const elements = DOMUtils.getTranslatableElements({
+        excludedSelectors: [],
+        targetLanguage: 'zh-CN',
+      });
+
+      expect(elements.find((e) => e.element.id === 'outer')).toBeUndefined();
+      expect(elements.find((e) => e.element.id === 'inner')).toBeDefined();
+      expect(elements.find((e) => e.text === '这是一段中文文本用于测试跳过逻辑')).toBeUndefined();
+    });
+
     test('should include short text inside <main> (lower threshold)', () => {
       document.body.innerHTML = `
         <main>

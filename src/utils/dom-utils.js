@@ -27,6 +27,12 @@ class DOMUtils {
 
         const DEFAULT_MIN_LEN = translateShortTexts ? 1 : 8;
         const MAIN_MIN_LEN = 3;
+        const shouldSkipLanguageGate = (text) => this.shouldSkipByLanguageGate(
+            text,
+            targetLanguage,
+            languageGateEnabled,
+            languageGateCJKThreshold
+        );
         // Enhanced selector to include lists, blockquotes, captions, and custom elements
         // body-text: Used by sites like The Economist (SvelteKit) for article content
         const candidates = document.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, blockquote, td, div, section, figcaption, dt, dd, body-text');
@@ -97,12 +103,13 @@ class DOMUtils {
                     const spanText = this.getElementText(span);
                     // Issue 19: Main content has lower min length
                     const spanMinLen = this.isInMainContent(span) ? Math.min(MAIN_MIN_LEN, DEFAULT_MIN_LEN) : DEFAULT_MIN_LEN;
-                    if (spanText.length >= spanMinLen && !/^\d+$/.test(spanText)) {
+                    if (spanText.length >= spanMinLen && !/^\d+$/.test(spanText) && !shouldSkipLanguageGate(spanText)) {
                         // Make span visible for jsdom tests
                         if (span.offsetParent === null && element.offsetParent !== null) {
                             // Inherit visibility from parent in test environment
                         }
-                        elements.push({ element: span, text: spanText });
+                        const richText = this.shouldUseRichTextV2(span) ? 'v2' : undefined;
+                        elements.push({ element: span, text: spanText, richText });
                     }
                 }
 
@@ -119,12 +126,13 @@ class DOMUtils {
                 for (const span of wrappedSpans) {
                     const spanText = this.getElementText(span);
                     const spanMinLen = this.isInMainContent(span) ? Math.min(MAIN_MIN_LEN, descendantMinLen) : descendantMinLen;
-                    if (spanText.length >= spanMinLen && !/^\d+$/.test(spanText)) {
+                    if (spanText.length >= spanMinLen && !/^\d+$/.test(spanText) && !shouldSkipLanguageGate(spanText)) {
                         // Inherit visibility from parent in test environment
                         if (span.offsetParent === null && element.offsetParent !== null) {
                             // jsdom doesn't compute offsetParent for dynamically created elements
                         }
-                        elements.push({ element: span, text: spanText });
+                        const richText = this.shouldUseRichTextV2(span) ? 'v2' : undefined;
+                        elements.push({ element: span, text: spanText, richText });
                     }
                 }
                 continue; // Skip the container itself
@@ -138,17 +146,7 @@ class DOMUtils {
             if (/^\d+$/.test(rawText)) continue;
 
             // Issue 12: Language gating (only effective when LangDetect is loaded)
-            if (
-                targetLanguage &&
-                typeof globalThis !== 'undefined' &&
-                globalThis.LangDetect &&
-                typeof globalThis.LangDetect.shouldSkipTranslation === 'function' &&
-                languageGateEnabled &&
-                globalThis.LangDetect.shouldSkipTranslation(rawText, targetLanguage, {
-                    enabled: languageGateEnabled,
-                    cjkThreshold: languageGateCJKThreshold,
-                })
-            ) {
+            if (shouldSkipLanguageGate(rawText)) {
                 continue;
             }
 
@@ -176,6 +174,20 @@ class DOMUtils {
         const parsed = typeof value === 'number' ? value : parseFloat(value);
         if (!Number.isFinite(parsed) || parsed <= 0 || parsed > 1) return undefined;
         return parsed;
+    }
+
+    static shouldSkipByLanguageGate(text, targetLanguage, languageGateEnabled, languageGateCJKThreshold) {
+        return !!(
+            targetLanguage &&
+            typeof globalThis !== 'undefined' &&
+            globalThis.LangDetect &&
+            typeof globalThis.LangDetect.shouldSkipTranslation === 'function' &&
+            languageGateEnabled &&
+            globalThis.LangDetect.shouldSkipTranslation(text, targetLanguage, {
+                enabled: languageGateEnabled,
+                cjkThreshold: languageGateCJKThreshold,
+            })
+        );
     }
 
     static isVisible(element) {
@@ -437,9 +449,6 @@ class DOMUtils {
             const text = this.normalizeText(node.textContent || '');
             return text.length >= minLen && !/^\d+$/.test(text);
         });
-        if (hasSubstantialDirectText) {
-            return this.wrapDirectTextNodes(element, minLen);
-        }
 
         const wrappers = [];
         let run = [];
@@ -473,12 +482,7 @@ class DOMUtils {
 
             if (
                 node.nodeType === Node.ELEMENT_NODE &&
-                !this.isBlockElement(node) &&
-                !this.isInteractiveElement(node) &&
-                !this.isStyleOrScript(node) &&
-                !this.isMathElement(node) &&
-                node.getAttribute('aria-hidden') !== 'true' &&
-                this.getElementText(node)
+                this.isEligibleInlineRunElement(node, !hasSubstantialDirectText)
             ) {
                 run.push(node);
                 continue;
@@ -489,6 +493,19 @@ class DOMUtils {
 
         flushRun();
         return wrappers;
+    }
+
+    static isEligibleInlineRunElement(node, includePlainInline = false) {
+        if (!node || node.nodeType !== Node.ELEMENT_NODE) return false;
+        if (this.isBlockElement(node)) return false;
+        if (this.isInteractiveElement(node)) return false;
+        if (this.isStyleOrScript(node)) return false;
+        if (this.isMathElement(node)) return false;
+        if (node.getAttribute('aria-hidden') === 'true') return false;
+        if (!this.getElementText(node)) return false;
+
+        const semanticInlineTags = ['A', 'B', 'STRONG', 'EM', 'I', 'CODE', 'SUP', 'SUB', 'SMALL', 'MARK'];
+        return includePlainInline || semanticInlineTags.includes(node.tagName);
     }
 
     /**
