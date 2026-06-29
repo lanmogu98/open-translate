@@ -103,6 +103,13 @@ function sanitizeUserPrompt(prompt) {
     return sanitized;
 }
 
+function stripLegacyDefaultPrompt(customPrompt) {
+    const custom = (customPrompt || '').trim();
+    const oldDefault = OLD_DEFAULT_PROMPT.trim();
+    if (!custom.startsWith(oldDefault)) return customPrompt;
+    return custom.substring(oldDefault.length).trim();
+}
+
 // Old default prompt for migration detection
 // NOTE (Issue 22): this must be an exact match string (not a substring signature),
 // otherwise we risk incorrectly treating user-modified prompts as "default".
@@ -162,7 +169,7 @@ function migrateCustomPrompt(oldConfig) {
         // Don't migrate only when it's EXACTLY the old default prompt (user never customized)
         const custom = result.customPrompt.trim();
         const isExactOldDefault = custom === OLD_DEFAULT_PROMPT.trim();
-        if (!isExactOldDefault) result.userTranslationPrompt = result.customPrompt;
+        if (!isExactOldDefault) result.userTranslationPrompt = stripLegacyDefaultPrompt(result.customPrompt);
     }
     
     // Mark customPrompt for deletion

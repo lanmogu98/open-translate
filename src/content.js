@@ -27,8 +27,10 @@ function buildSegmentMarker(index) {
 
 function sanitizeSegmentText(text) {
     return String(text || '')
+        .replace(/⟦⟦SEG:(\d+)⟧⟧/g, '[[SEG:$1]]')
         .replace(/⟦⟦SEG:/g, '[[SEG:')
-        .replace(/⟧⟧/g, ']]');
+        .replace(/<\s*\/\s*translate_input\s*>/gi, (tag) => tag.replace(/</g, '&lt;').replace(/>/g, '&gt;'))
+        .replace(/<\s*translate_input\b[^>]*>/gi, (tag) => tag.replace(/</g, '&lt;').replace(/>/g, '&gt;'));
 }
 
 function findNextSegmentMarker(text) {
@@ -148,6 +150,8 @@ async function translateBatch(batch, llmClient) {
     let activeIndex = null;
     let expectedNextIndex = 0;
     let lastClosedIndex = null;
+    let invalidMarkerSeen = false;
+    let batchFailed = false;
     const segmentTexts = new Array(batch.length).fill('');
     const seenCounts = new Array(batch.length).fill(0);
     const fallbackIndexes = new Set();
@@ -194,6 +198,9 @@ async function translateBatch(batch, llmClient) {
         for (let i = expectedNextIndex; i < lastSkipped; i++) {
             fallbackIndexes.add(i);
         }
+        if (nextIndex >= 0 && nextIndex < batch.length) {
+            fallbackIndexes.add(nextIndex);
+        }
         if (previousIndex !== null && previousIndex !== undefined) {
             fallbackIndexes.add(previousIndex);
         }
@@ -201,6 +208,7 @@ async function translateBatch(batch, llmClient) {
 
     function startSegment(index, previousIndex) {
         if (index < 0 || index >= batch.length) {
+            invalidMarkerSeen = true;
             if (previousIndex !== null && previousIndex !== undefined) {
                 fallbackIndexes.add(previousIndex);
             }
@@ -212,6 +220,9 @@ async function translateBatch(batch, llmClient) {
                 markSkippedSegments(index, previousIndex);
             } else {
                 fallbackIndexes.add(index);
+                if (previousIndex !== null && previousIndex !== undefined) {
+                    fallbackIndexes.add(previousIndex);
+                }
             }
         }
 
@@ -255,7 +266,7 @@ async function translateBatch(batch, llmClient) {
 
             const partialStart = findPartialSegmentMarkerStart(buffer);
             if (final) {
-                appendToActiveSegment(partialStart === -1 ? buffer : buffer.substring(0, partialStart));
+                appendToActiveSegment(buffer);
                 buffer = '';
                 finalizeActiveSegment();
                 return;
@@ -282,6 +293,11 @@ async function translateBatch(batch, llmClient) {
                 fallbackIndexes.add(i);
             }
         }
+        if (invalidMarkerSeen) {
+            for (let i = 0; i < batch.length; i++) {
+                fallbackIndexes.add(i);
+            }
+        }
         if (missing.some(index => index > highestSeen) && lastClosedIndex !== null) {
             fallbackIndexes.add(lastClosedIndex);
         }
@@ -291,29 +307,34 @@ async function translateBatch(batch, llmClient) {
     }
 
     function stripFallbackSegmentMarker(output, expectedIndex) {
-        const marker = findNextSegmentMarker(output || '');
-        if (marker && marker.index === expectedIndex) {
-            const rest = (output || '').substring(marker.end);
+        const text = String(output || '');
+        const expectedMarker = buildSegmentMarker(expectedIndex);
+        const expectedStart = text.indexOf(expectedMarker);
+        if (expectedStart !== -1) {
+            const rest = text.substring(expectedStart + expectedMarker.length);
             const nextMarker = findNextSegmentMarker(rest);
             return (nextMarker ? rest.substring(0, nextMarker.start) : rest).trim();
         }
         SEGMENT_MARKER_PATTERN.lastIndex = 0;
-        return String(output || '').replace(SEGMENT_MARKER_PATTERN, '').trim();
+        return text.replace(SEGMENT_MARKER_PATTERN, '').trim();
     }
 
     function translateSingleSegment(index) {
         return new Promise((resolve) => {
             let output = '';
+            let failed = false;
             llmClient.translateStream(
                 segmentInputs[index],
                 (chunk) => {
                     output += chunk;
                 },
                 (error) => {
+                    failed = true;
                     if (nodes[index]) DOMUtils.showError(nodes[index], error);
                     resolve();
                 },
                 () => {
+                    if (failed) return;
                     segmentTexts[index] = stripFallbackSegmentMarker(output, index);
                     renderSegment(index, true);
                     resolve();
@@ -337,6 +358,7 @@ async function translateBatch(batch, llmClient) {
                 processBuffer(false);
             },
             (error) => {
+                batchFailed = true;
                 batch.forEach((ctx, idx) => {
                     if (nodes[idx]) {
                         nodes[idx].textContent += ` [Error: ${error}]`;
@@ -347,6 +369,7 @@ async function translateBatch(batch, llmClient) {
                 resolve();
             },
             async () => {
+                if (batchFailed) return;
                 processBuffer(true);
                 await runFallbackTranslations();
                 nodes.forEach(node => {

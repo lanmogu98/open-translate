@@ -33,7 +33,7 @@ describe('prompt-templates', () => {
       expect(PromptTemplates.PROTOCOL_PROMPT).toContain('⟦⟦SEG:0⟧⟧');
       expect(PromptTemplates.PROTOCOL_PROMPT).toContain('⟦⟦SEG:1⟧⟧');
       expect(PromptTemplates.PROTOCOL_PROMPT).toMatch(/same segment ID/i);
-      expect(PromptTemplates.PROTOCOL_PROMPT).not.toMatch(/separated by %%|Use %%/);
+      expect(PromptTemplates.PROTOCOL_PROMPT).not.toContain('%%');
     });
     
     test('should contain output format constraints', () => {
@@ -48,6 +48,13 @@ describe('prompt-templates', () => {
       expect(PromptTemplates.PROTOCOL_PROMPT).toContain('[[ITC:a0]]');
       expect(PromptTemplates.PROTOCOL_PROMPT).toContain('[[/ITC]]');
       expect(PromptTemplates.PROTOCOL_PROMPT).toContain('[[ITC:ref0]]');
+    });
+
+    test('should preserve translate_input security wrapper guidance', () => {
+      expect(PromptTemplates).not.toBeNull();
+      expect(PromptTemplates.PROTOCOL_PROMPT).toContain('<translate_input>');
+      expect(PromptTemplates.PROTOCOL_PROMPT).toContain('</translate_input>');
+      expect(PromptTemplates.PROTOCOL_PROMPT).toMatch(/UNTRUSTED web page content/);
     });
   });
 
@@ -172,14 +179,16 @@ describe('prompt-templates', () => {
       expect(result.customPrompt === undefined || result.customPrompt === null).toBe(true);
     });
 
-     test('should migrate prompt that contains old signature but is not exactly old default (Issue 22)', () => {
+     test('should migrate user additions from old default prompt without legacy %% protocol rules', () => {
        expect(PromptTemplates).not.toBeNull();
        expect(PromptTemplates.OLD_DEFAULT_PROMPT).toBeDefined();
 
        const modified = PromptTemplates.OLD_DEFAULT_PROMPT + '\n\n# User tweak: keep more literal tone.';
        const result = PromptTemplates.migrateCustomPrompt({ customPrompt: modified });
 
-       expect(result.userTranslationPrompt).toBe(modified);
+       expect(result.userTranslationPrompt).toContain('User tweak: keep more literal tone.');
+       expect(result.userTranslationPrompt).not.toContain('%%');
+       expect(result.userTranslationPrompt).not.toContain('OUTPUT FORMAT');
      });
 
      test('should NOT migrate when customPrompt equals OLD_DEFAULT_PROMPT exactly (Issue 22)', () => {
