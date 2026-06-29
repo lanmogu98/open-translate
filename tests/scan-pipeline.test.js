@@ -171,7 +171,74 @@ describe('scan pipeline (Issue 19 + Issue 12)', () => {
 
       expect(elements.find((e) => e.element.id === 'outer')).toBeUndefined();
       expect(elements.find((e) => e.element.id === 'inner')).toBeDefined();
-      expect(elements.filter((e) => e.text === 'Read the linked documentation.')).toHaveLength(1);
+      const wrapper = elements.find((e) => e.text === 'Read the linked documentation.');
+      expect(wrapper).toBeDefined();
+      expect(wrapper.richText).toBe('v2');
+      expect(wrapper.element.querySelector('a').getAttribute('href')).toBe('/docs');
+    });
+
+    test('should preserve parent div inline text when child div is selected', () => {
+      document.body.innerHTML = `
+        <main>
+          <div id="outer">
+            <span>Parent div inline intro should also be translated.</span>
+            <div id="inner">Nested div text with enough content to translate.</div>
+          </div>
+        </main>
+      `;
+      makeAllVisible('main, div, span');
+
+      const elements = DOMUtils.getTranslatableElements({
+        excludedSelectors: [],
+      });
+
+      expect(elements.find((e) => e.element.id === 'outer')).toBeUndefined();
+      expect(elements.find((e) => e.element.id === 'inner')).toBeDefined();
+      expect(elements.filter((e) => e.text === 'Parent div inline intro should also be translated.')).toHaveLength(1);
+    });
+
+    test('should preserve plain inline span inside parent direct text run', () => {
+      document.body.innerHTML = `
+        <main>
+          <section id="outer">
+            Lead text <span>inline span text</span> tail.
+            <section id="inner"><span>Nested section text should be translated once.</span></section>
+          </section>
+        </main>
+      `;
+      makeAllVisible('main, section, span');
+
+      const elements = DOMUtils.getTranslatableElements({
+        excludedSelectors: [],
+      });
+
+      expect(elements.find((e) => e.element.id === 'outer')).toBeUndefined();
+      expect(elements.find((e) => e.element.id === 'inner')).toBeDefined();
+      expect(elements.filter((e) => e.text === 'Lead text inline span text tail.')).toHaveLength(1);
+    });
+
+    test('should not rewrap existing direct text wrappers on repeated scans', () => {
+      document.body.innerHTML = `
+        <main>
+          <section id="outer">
+            <span>Parent inline intro should also be translated.</span>
+            <section id="inner"><span>Nested section text should be translated once.</span></section>
+          </section>
+        </main>
+      `;
+      makeAllVisible('main, section, span');
+
+      DOMUtils.getTranslatableElements({
+        excludedSelectors: [],
+      });
+      const secondPass = DOMUtils.getTranslatableElements({
+        excludedSelectors: [],
+      });
+
+      const wrappers = document.querySelectorAll('.immersive-translate-text-wrapper');
+      expect(wrappers).toHaveLength(1);
+      expect(wrappers[0].querySelector('.immersive-translate-text-wrapper')).toBeNull();
+      expect(secondPass.filter((e) => e.text === 'Parent inline intro should also be translated.')).toHaveLength(1);
     });
 
     test('should apply language gating to wrapped parent inline text', () => {

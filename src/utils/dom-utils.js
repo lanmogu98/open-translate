@@ -78,19 +78,20 @@ class DOMUtils {
             // This is hard to get perfect universally without complex logic.
             // For now, we rely on text length. Small text in DIVs is often UI.
 
-            // Ensure it has direct text content (not just nested elements)
-            // This helps avoid translating container divs that just hold other divs
-            if (['DIV', 'LI', 'TD'].includes(element.tagName) &&
-                !this.hasDirectText(element) &&
-                !this.hasInlineOnlyTextContent(element)) {
-                continue;
-            }
-
             // Issue 29: Handle containers with translatable descendants
             // Use MAIN_MIN_LEN as threshold since descendants could be in main content
             // This ensures we detect all potentially translatable descendants
             const descendantMinLen = Math.min(MAIN_MIN_LEN, DEFAULT_MIN_LEN);
             const hasDescendants = this.hasTranslatableDescendants(element, descendantMinLen);
+
+            // Ensure it has direct text content (not just nested elements)
+            // This helps avoid translating container divs that just hold other divs
+            if (!hasDescendants &&
+                ['DIV', 'LI', 'TD'].includes(element.tagName) &&
+                !this.hasDirectText(element) &&
+                !this.hasInlineOnlyTextContent(element)) {
+                continue;
+            }
 
             // If container has translatable descendants, wrap direct text nodes instead
             // of including the container itself. This prevents translation positioning issues.
@@ -482,7 +483,23 @@ class DOMUtils {
 
             if (
                 node.nodeType === Node.ELEMENT_NODE &&
-                this.isEligibleInlineRunElement(node, !hasSubstantialDirectText)
+                node.classList &&
+                node.classList.contains('immersive-translate-text-wrapper')
+            ) {
+                flushRun();
+                if (
+                    !node.querySelector('.immersive-translate-target') &&
+                    this.getElementText(node).length >= minLen &&
+                    !/^\d+$/.test(this.getElementText(node))
+                ) {
+                    wrappers.push(node);
+                }
+                continue;
+            }
+
+            if (
+                node.nodeType === Node.ELEMENT_NODE &&
+                this.isEligibleInlineRunElement(node)
             ) {
                 run.push(node);
                 continue;
@@ -495,8 +512,11 @@ class DOMUtils {
         return wrappers;
     }
 
-    static isEligibleInlineRunElement(node, includePlainInline = false) {
+    static isEligibleInlineRunElement(node) {
         if (!node || node.nodeType !== Node.ELEMENT_NODE) return false;
+        if (node.classList && node.classList.contains('immersive-translate-text-wrapper')) return false;
+        if (node.classList && node.classList.contains('immersive-translate-target')) return false;
+        if (node.querySelector && node.querySelector('.immersive-translate-text-wrapper, .immersive-translate-target')) return false;
         if (this.isBlockElement(node)) return false;
         if (this.isInteractiveElement(node)) return false;
         if (this.isStyleOrScript(node)) return false;
@@ -504,8 +524,7 @@ class DOMUtils {
         if (node.getAttribute('aria-hidden') === 'true') return false;
         if (!this.getElementText(node)) return false;
 
-        const semanticInlineTags = ['A', 'B', 'STRONG', 'EM', 'I', 'CODE', 'SUP', 'SUB', 'SMALL', 'MARK'];
-        return includePlainInline || semanticInlineTags.includes(node.tagName);
+        return true;
     }
 
     /**
