@@ -2,7 +2,7 @@
  * Prompt Templates for Immersive Translate Clone
  * 
  * This module separates:
- * - PROTOCOL_PROMPT: Internal, non-editable rules for output format (%% separator, etc.)
+ * - PROTOCOL_PROMPT: Internal, non-editable rules for output format (SEG markers, etc.)
  * - User prompt: Editable translation style preferences
  * 
  * Usage:
@@ -49,16 +49,18 @@ const PROTOCOL_PROMPT = `You are a professional translator. Translate the input 
 ## STRICT OUTPUT RULES (DO NOT VIOLATE):
 1. Output ONLY the translation - no explanations, no "Here's the translation:", no extra text
 2. Maintain the EXACT same number of paragraphs as the input
-3. For multi-paragraph input separated by %%, output translations separated by %%
-4. Preserve HTML tags in appropriate positions while maintaining fluency
-5. Keep untranslatable content (proper nouns, code, URLs) as-is
+3. Every input paragraph starts with a segment marker like ⟦⟦SEG:0⟧⟧, ⟦⟦SEG:1⟧⟧, etc.
+4. Start each translated paragraph with the exact same segment ID marker as its source paragraph
+5. Emit each segment ID exactly once; do not skip, duplicate, renumber, reorder, or invent segment IDs
+6. Preserve HTML tags in appropriate positions while maintaining fluency
+7. Keep untranslatable content (proper nouns, code, URLs) as-is
 
 ## RICH TEXT MODE (V2 Token Protocol):
-- If a paragraph starts with the marker [[ITC_RICH_V2]], the next line will contain plain text with immutable tokens.
+- If a segment contains the marker [[ITC_RICH_V2]], the next line will contain plain text with immutable tokens.
 - Tokens look like:
   - Paired tokens wrapping translatable content: [[ITC:a0]] ... [[/ITC]]
   - Atomic tokens (must be preserved exactly once, do not edit): [[ITC:ref0]]
-- Your output for that paragraph MUST be plain translated text that still contains ALL the same tokens:
+- Your output after that segment's ⟦⟦SEG:N⟧⟧ marker MUST be plain translated text that still contains ALL the same tokens:
   - Do NOT output HTML or Markdown
   - Do NOT wrap output in code fences
   - Do NOT add any other text besides the translation
@@ -67,8 +69,9 @@ const PROTOCOL_PROMPT = `You are a professional translator. Translate the input 
   - You MUST NOT delete or duplicate any token (especially [[ITC:refN]] footnote tokens)
 
 ## OUTPUT FORMAT:
-- Single paragraph → Output translation directly
-- Multiple paragraphs → Use %% as separator between translations`;
+- Input: ⟦⟦SEG:0⟧⟧ followed by source text
+- Output: ⟦⟦SEG:0⟧⟧ followed by the translation for that same segment ID
+- Multiple paragraphs → output one translated segment per input segment, each starting with its own SEG marker`;
 
 // Default user translation prompt
 const DEFAULT_USER_PROMPT = 'Translation style: media style expert (news). Maintain a journalistic tone, structure, and diction. Keep headlines concise and impactful while accurately conveying meaning. Translate quotes precisely, preserving context and intent. Ensure journalistic terms, datelines, and attributions are accurate. Preserve proper nouns, names of people, organizations, and places. When HTML tags appear, place them appropriately while keeping the translation fluent.';
@@ -190,4 +193,3 @@ if (typeof module !== 'undefined' && module.exports) {
 if (typeof globalThis !== 'undefined') {
     globalThis.PromptTemplates = PromptTemplates;
 }
-

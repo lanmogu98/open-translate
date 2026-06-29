@@ -28,9 +28,12 @@ describe('prompt-templates', () => {
       expect(PromptTemplates.PROTOCOL_PROMPT).toBeDefined();
     });
 
-    test('should contain %% separator rules', () => {
+    test('should contain SEG marker identity rules instead of %% separator rules', () => {
       expect(PromptTemplates).not.toBeNull();
-      expect(PromptTemplates.PROTOCOL_PROMPT).toMatch(/%%/);
+      expect(PromptTemplates.PROTOCOL_PROMPT).toContain('⟦⟦SEG:0⟧⟧');
+      expect(PromptTemplates.PROTOCOL_PROMPT).toContain('⟦⟦SEG:1⟧⟧');
+      expect(PromptTemplates.PROTOCOL_PROMPT).toMatch(/same segment ID/i);
+      expect(PromptTemplates.PROTOCOL_PROMPT).not.toMatch(/separated by %%|Use %%/);
     });
     
     test('should contain output format constraints', () => {

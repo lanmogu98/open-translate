@@ -17,6 +17,45 @@ const DEFAULT_BATCH_SIZE = 10;
 // Issue 41: Batch size limits for security and performance
 const MIN_BATCH_SIZE = 1;
 const MAX_BATCH_SIZE = 50;
+const SEGMENT_MARKER_PREFIX = '⟦⟦SEG:';
+const SEGMENT_MARKER_SUFFIX = '⟧⟧';
+const SEGMENT_MARKER_PATTERN = /⟦⟦SEG:(\d+)⟧⟧/g;
+
+function buildSegmentMarker(index) {
+    return `${SEGMENT_MARKER_PREFIX}${index}${SEGMENT_MARKER_SUFFIX}`;
+}
+
+function sanitizeSegmentText(text) {
+    return String(text || '')
+        .replace(/⟦⟦SEG:/g, '[[SEG:')
+        .replace(/⟧⟧/g, ']]');
+}
+
+function findNextSegmentMarker(text) {
+    SEGMENT_MARKER_PATTERN.lastIndex = 0;
+    const match = SEGMENT_MARKER_PATTERN.exec(text);
+    if (!match) return null;
+    return {
+        start: match.index,
+        end: match.index + match[0].length,
+        index: parseInt(match[1], 10),
+    };
+}
+
+function isPartialSegmentMarker(text) {
+    if (!text) return false;
+    if (SEGMENT_MARKER_PREFIX.startsWith(text)) return true;
+    return /^⟦⟦SEG:\d*$/.test(text) || /^⟦⟦SEG:\d+⟧$/.test(text);
+}
+
+function findPartialSegmentMarkerStart(text) {
+    const maxMarkerLength = SEGMENT_MARKER_PREFIX.length + 10 + SEGMENT_MARKER_SUFFIX.length;
+    const start = Math.max(0, text.length - maxMarkerLength);
+    for (let i = start; i < text.length; i++) {
+        if (isPartialSegmentMarker(text.substring(i))) return i;
+    }
+    return -1;
+}
 
 /**
  * Issue 41: Validate and sanitize batch size
@@ -92,100 +131,210 @@ async function translateBatch(batch, llmClient) {
         return DOMUtils.injectTranslationNode(ctx.element);
     });
 
-    // 2. Prepare Text with %% separator
-    // If batch size is 1, we don't need separator, but strictly following rule 5 in prompt is safer.
-    // However, prompt says "Multi-paragraph input -> Use %%".
-    const separator = '\n%%\n';
-    const combinedText = batch
-        .map((ctx, idx) => {
-            if (modes[idx] === 'v2' && richTokenized[idx] && typeof richTokenized[idx].text === 'string') {
-                // tokenized.text already contains marker + newline + tokenized content
-                return richTokenized[idx].text;
-            }
-            return (ctx.text || '').replace(/\n/g, ' ');
-        })
-        .join(separator);
+    // 3. Prepare text with explicit segment identity markers.
+    const segmentInputs = batch.map((ctx, idx) => {
+        let text;
+        if (modes[idx] === 'v2' && richTokenized[idx] && typeof richTokenized[idx].text === 'string') {
+            text = richTokenized[idx].text;
+        } else {
+            text = (ctx.text || '').replace(/\n/g, ' ');
+        }
+        return `${buildSegmentMarker(idx)}\n${sanitizeSegmentText(text)}`;
+    });
+    const combinedText = segmentInputs.join('\n');
 
-    // 3. Stream Handler State
+    // 4. Stream Handler State
     let buffer = '';
-    let currentNodeIndex = 0;
+    let activeIndex = null;
+    let expectedNextIndex = 0;
+    let lastClosedIndex = null;
+    const segmentTexts = new Array(batch.length).fill('');
+    const seenCounts = new Array(batch.length).fill(0);
+    const fallbackIndexes = new Set();
+
+    function renderSegment(index, final) {
+        const node = nodes[index];
+        if (!node) return;
+
+        const raw = final ? segmentTexts[index].trim() : segmentTexts[index].trimStart();
+        if (modes[index] === 'v2' && richTokenized[index] && globalThis.RichTextV2) {
+            if (!final) return;
+            const ok = globalThis.RichTextV2.renderToNode(node, richTokenized[index], raw);
+            if (!ok) {
+                node.textContent = raw;
+            }
+            return;
+        }
+
+        DOMUtils.removeLoadingState(node);
+        node.textContent = raw;
+    }
+
+    function appendToActiveSegment(content) {
+        if (activeIndex === null || !content) return;
+        segmentTexts[activeIndex] += content;
+        renderSegment(activeIndex, false);
+    }
+
+    function finalizeActiveSegment() {
+        if (activeIndex === null) return null;
+        const closedIndex = activeIndex;
+        renderSegment(closedIndex, true);
+        if (segmentTexts[closedIndex].trim().length === 0) {
+            fallbackIndexes.add(closedIndex);
+        }
+        lastClosedIndex = closedIndex;
+        activeIndex = null;
+        return closedIndex;
+    }
+
+    function markSkippedSegments(nextIndex, previousIndex) {
+        if (nextIndex <= expectedNextIndex) return;
+        const lastSkipped = Math.min(nextIndex, batch.length);
+        for (let i = expectedNextIndex; i < lastSkipped; i++) {
+            fallbackIndexes.add(i);
+        }
+        if (previousIndex !== null && previousIndex !== undefined) {
+            fallbackIndexes.add(previousIndex);
+        }
+    }
+
+    function startSegment(index, previousIndex) {
+        if (index < 0 || index >= batch.length) {
+            if (previousIndex !== null && previousIndex !== undefined) {
+                fallbackIndexes.add(previousIndex);
+            }
+            return;
+        }
+
+        if (index !== expectedNextIndex) {
+            if (index > expectedNextIndex) {
+                markSkippedSegments(index, previousIndex);
+            } else {
+                fallbackIndexes.add(index);
+            }
+        }
+
+        seenCounts[index]++;
+        if (seenCounts[index] > 1) {
+            fallbackIndexes.add(index);
+            activeIndex = null;
+            return;
+        }
+
+        segmentTexts[index] = '';
+        activeIndex = index;
+        expectedNextIndex = Math.max(expectedNextIndex, index + 1);
+    }
+
+    function processBuffer(final) {
+        while (true) {
+            const marker = findNextSegmentMarker(buffer);
+            if (marker) {
+                appendToActiveSegment(buffer.substring(0, marker.start));
+                const previousIndex = finalizeActiveSegment();
+                startSegment(marker.index, previousIndex);
+                buffer = buffer.substring(marker.end);
+                continue;
+            }
+
+            if (activeIndex === null) {
+                const partialStart = findPartialSegmentMarkerStart(buffer);
+                buffer = partialStart === -1 ? '' : buffer.substring(partialStart);
+                return;
+            }
+
+            if (modes[activeIndex] === 'v2') {
+                if (final) {
+                    appendToActiveSegment(buffer);
+                    buffer = '';
+                    finalizeActiveSegment();
+                }
+                return;
+            }
+
+            const partialStart = findPartialSegmentMarkerStart(buffer);
+            if (final) {
+                appendToActiveSegment(partialStart === -1 ? buffer : buffer.substring(0, partialStart));
+                buffer = '';
+                finalizeActiveSegment();
+                return;
+            }
+
+            if (partialStart === -1) {
+                appendToActiveSegment(buffer);
+                buffer = '';
+            } else {
+                appendToActiveSegment(buffer.substring(0, partialStart));
+                buffer = buffer.substring(partialStart);
+            }
+            return;
+        }
+    }
+
+    function collectFallbackIndexes() {
+        const missing = [];
+        let highestSeen = -1;
+        for (let i = 0; i < seenCounts.length; i++) {
+            if (seenCounts[i] > 0) highestSeen = i;
+            if (seenCounts[i] !== 1) {
+                missing.push(i);
+                fallbackIndexes.add(i);
+            }
+        }
+        if (missing.some(index => index > highestSeen) && lastClosedIndex !== null) {
+            fallbackIndexes.add(lastClosedIndex);
+        }
+        return Array.from(fallbackIndexes)
+            .filter(index => index >= 0 && index < batch.length && nodes[index])
+            .sort((a, b) => a - b);
+    }
+
+    function stripFallbackSegmentMarker(output, expectedIndex) {
+        const marker = findNextSegmentMarker(output || '');
+        if (marker && marker.index === expectedIndex) {
+            const rest = (output || '').substring(marker.end);
+            const nextMarker = findNextSegmentMarker(rest);
+            return (nextMarker ? rest.substring(0, nextMarker.start) : rest).trim();
+        }
+        SEGMENT_MARKER_PATTERN.lastIndex = 0;
+        return String(output || '').replace(SEGMENT_MARKER_PATTERN, '').trim();
+    }
+
+    function translateSingleSegment(index) {
+        return new Promise((resolve) => {
+            let output = '';
+            llmClient.translateStream(
+                segmentInputs[index],
+                (chunk) => {
+                    output += chunk;
+                },
+                (error) => {
+                    if (nodes[index]) DOMUtils.showError(nodes[index], error);
+                    resolve();
+                },
+                () => {
+                    segmentTexts[index] = stripFallbackSegmentMarker(output, index);
+                    renderSegment(index, true);
+                    resolve();
+                }
+            );
+        });
+    }
+
+    async function runFallbackTranslations() {
+        const indexes = collectFallbackIndexes();
+        for (const index of indexes) {
+            await translateSingleSegment(index);
+        }
+    }
 
     return new Promise((resolve) => {
         llmClient.translateStream(
             combinedText,
             (chunk) => {
                 buffer += chunk;
-
-                // We look for the separator pattern "%%"
-                // It might be surrounded by newlines, but "%%" is the strong signal.
-
-                while (true) {
-                    const tagIndex = buffer.indexOf('%%');
-
-                    if (tagIndex !== -1) {
-                        // Found a separator
-
-                        // Content before the separator belongs to the CURRENT node
-                        const content = buffer.substring(0, tagIndex);
-
-                        const node = nodes[currentNodeIndex];
-                        if (node) {
-                            const mode = modes[currentNodeIndex];
-                            if (mode === 'v2' && richTokenized[currentNodeIndex] && globalThis.RichTextV2) {
-                                const out = content.trim();
-                                const ok = globalThis.RichTextV2.renderToNode(node, richTokenized[currentNodeIndex], out);
-                                if (!ok) {
-                                    // Issue 39: textContent automatically clears children, no need for innerHTML
-                                    node.textContent = out;
-                                }
-                            } else {
-                                // Trim trailing newlines usually associated with the separator
-                                DOMUtils.appendTranslation(node, content.trimEnd());
-                            }
-                        }
-
-                        // Advance to next node
-                        currentNodeIndex++;
-
-                        // Remove processed part + separator length (2 for %%) from buffer
-                        // But wait, it might be \n%%\n.
-                        // We should be resilient.
-                        // Let's remove the %% and any immediate following newlines or spaces to start fresh for next node.
-
-                        let nextStart = tagIndex + 2;
-                        // Skip logic or simple slice? 
-                        // Simple slice is safest, subsequent trim usually handles whitespace.
-
-                        buffer = buffer.substring(nextStart);
-
-                    } else {
-                        // No separator found yet.
-                        // For rich-text V2 paragraphs we must buffer until paragraph boundary,
-                        // otherwise we'd render incomplete token sequences.
-                        if (modes[currentNodeIndex] === 'v2') {
-                            break; // wait for more data
-                        }
-
-                        // Plain path: filter out partial "%%" before flushing to UI
-                        // to avoid users seeing "%" momentarily.
-                        const partialMatch = buffer.lastIndexOf('%');
-                        if (partialMatch !== -1 && buffer.length - partialMatch < 2) {
-                            // Possible start of %%, keep it in buffer
-                            const safeContent = buffer.substring(0, partialMatch);
-                            if (nodes[currentNodeIndex]) {
-                                DOMUtils.appendTranslation(nodes[currentNodeIndex], safeContent);
-                            }
-                            buffer = buffer.substring(partialMatch);
-                        } else {
-                            // Safe to flush all
-                            if (nodes[currentNodeIndex]) {
-                                DOMUtils.appendTranslation(nodes[currentNodeIndex], buffer);
-                            }
-                            buffer = '';
-                        }
-                        break; // Wait for more data
-                    }
-                }
+                processBuffer(false);
             },
             (error) => {
                 batch.forEach((ctx, idx) => {
@@ -197,23 +346,9 @@ async function translateBatch(batch, llmClient) {
                 });
                 resolve();
             },
-            () => {
-                // Final flush of whatever is left in buffer
-                if (buffer.length > 0 && nodes[currentNodeIndex]) {
-                    const node = nodes[currentNodeIndex];
-                    const mode = modes[currentNodeIndex];
-                    if (mode === 'v2' && richTokenized[currentNodeIndex] && globalThis.RichTextV2) {
-                        const out = buffer.trim();
-                        const ok = globalThis.RichTextV2.renderToNode(node, richTokenized[currentNodeIndex], out);
-                        if (!ok) {
-                            // Issue 39: textContent automatically clears children, no need for innerHTML
-                            node.textContent = out;
-                        }
-                    } else {
-                        DOMUtils.appendTranslation(node, buffer.trim());
-                    }
-                }
-
+            async () => {
+                processBuffer(true);
+                await runFallbackTranslations();
                 nodes.forEach(node => {
                     if (node) DOMUtils.removeLoadingState(node);
                 });
