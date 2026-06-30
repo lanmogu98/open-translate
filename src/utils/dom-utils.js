@@ -199,7 +199,6 @@ class DOMUtils {
                 return element.checkVisibility({
                     checkOpacity: false,
                     checkVisibilityCSS: true,
-                    contentVisibilityAuto: true,
                 });
             } catch (e) {
                 try {
@@ -230,10 +229,6 @@ class DOMUtils {
 
     static isInMainContent(element) {
         return !!(element && element.closest && element.closest('main, article, [role="main"]'));
-    }
-
-    static isInNavigationArea(element) {
-        return !!(element && element.closest && element.closest('nav, header, footer, aside, [role="navigation"]'));
     }
 
     static shouldSkipNavigationArea(element, options = {}) {
@@ -445,12 +440,6 @@ class DOMUtils {
     }
 
     static wrapDirectTranslatableRuns(element, minLen = 3) {
-        const hasSubstantialDirectText = Array.from(element.childNodes).some((node) => {
-            if (node.nodeType !== Node.TEXT_NODE) return false;
-            const text = this.normalizeText(node.textContent || '');
-            return text.length >= minLen && !/^\d+$/.test(text);
-        });
-
         const wrappers = [];
         let run = [];
 
@@ -647,6 +636,12 @@ class DOMUtils {
             if (this.isInteractiveElement(desc)) continue;
             if (this.isStyleOrScript(desc)) continue;
             if (this.isMathElement(desc)) continue;
+
+            // Cheap text gate first: avoid cloning/querying large descendant
+            // subtrees that are too short to become translation units anyway.
+            const text = this.getElementText(desc);
+            if (text.length < minLen || /^\d+$/.test(text)) continue;
+
             if (this.isPrimarilyMathContent(desc)) continue;
 
             if (['DIV', 'LI', 'TD'].includes(desc.tagName) &&
@@ -655,11 +650,7 @@ class DOMUtils {
                 continue;
             }
 
-            // Check if descendant has meaningful text content
-            const text = this.getElementText(desc);
-            if (text.length >= minLen && !/^\d+$/.test(text)) {
-                return true;
-            }
+            return true;
         }
 
         return false;

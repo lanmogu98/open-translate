@@ -512,6 +512,28 @@ describe('DOMUtils - Smart Filtering (shouldTranslate)', () => {
       expect(elements.find(e => e.element === p)).toBeDefined();
     });
 
+    test('should not permanently skip off-screen content-visibility auto content', () => {
+      const p = document.createElement('p');
+      p.textContent = 'Documentation paragraph below the fold should still be selected.';
+      document.body.appendChild(p);
+      makeVisible(p);
+      const checkVisibility = jest.fn((options = {}) => {
+        return options.contentVisibilityAuto === true ? false : true;
+      });
+      Object.defineProperty(p, 'checkVisibility', {
+        value: checkVisibility,
+        configurable: true
+      });
+
+      const elements = DOMUtils.getTranslatableElements();
+
+      expect(elements.find(e => e.element === p)).toBeDefined();
+      expect(checkVisibility).toHaveBeenCalled();
+      expect(checkVisibility.mock.calls[0][0]).not.toMatchObject({
+        contentVisibilityAuto: true
+      });
+    });
+
     test('should use normalized textContent instead of empty innerText', () => {
       const p = document.createElement('p');
       p.innerHTML = '<span hidden>Deferred    article\ncontent should still be scanned.</span>';
@@ -527,6 +549,26 @@ describe('DOMUtils - Smart Filtering (shouldTranslate)', () => {
 
       expect(result).toBeDefined();
       expect(result.text).toBe('Deferred article content should still be scanned.');
+    });
+  });
+
+  describe('descendant scan performance guards', () => {
+    test('should skip expensive math-content checks for descendants below text threshold', () => {
+      document.body.innerHTML = `
+        <div id="container">
+          <p>Short</p>
+          <div><span>Tiny</span></div>
+          <section><span>Brief</span></section>
+        </div>
+      `;
+      const container = document.getElementById('container');
+      const mathSpy = jest.spyOn(DOMUtils, 'isPrimarilyMathContent');
+
+      const hasDescendants = DOMUtils.hasTranslatableDescendants(container, 8);
+
+      expect(hasDescendants).toBe(false);
+      expect(mathSpy).not.toHaveBeenCalled();
+      mathSpy.mockRestore();
     });
   });
 
