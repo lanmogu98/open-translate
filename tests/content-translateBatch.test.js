@@ -133,6 +133,58 @@ describe('content translateBatch (stream parser)', () => {
     expect(cNode.textContent).toBe('甲三');
   });
 
+  test('falls back the preceding segment when an intermediate SEG marker has an empty body', async () => {
+    document.body.innerHTML = `
+      <p id="a">Paragraph one is long enough.</p>
+      <p id="b">Paragraph two is also long enough.</p>
+      <p id="c">Paragraph three is also long enough.</p>
+    `;
+
+    const a = document.getElementById('a');
+    const b = document.getElementById('b');
+    const c = document.getElementById('c');
+    const requests = [];
+
+    const llmClient = {
+      translateStream: (text, onChunk, onError, onDone) => {
+        requests.push(text);
+        if (requests.length === 1) {
+          onChunk('⟦⟦SEG:0⟧⟧甲一甲二');
+          onChunk('⟦⟦SEG:1⟧⟧');
+          onChunk('⟦⟦SEG:2⟧⟧甲三');
+          onDone();
+          return;
+        }
+        if (text.includes('Paragraph one')) {
+          onChunk('⟦⟦SEG:0⟧⟧甲一');
+        } else if (text.includes('Paragraph two')) {
+          onChunk('⟦⟦SEG:1⟧⟧甲二');
+        }
+        onDone();
+      },
+    };
+
+    await translateBatch(
+      [
+        { element: a, text: a.textContent },
+        { element: b, text: b.textContent },
+        { element: c, text: c.textContent },
+      ],
+      llmClient
+    );
+
+    const aNode = a.querySelector(':scope > .immersive-translate-target');
+    const bNode = b.querySelector(':scope > .immersive-translate-target');
+    const cNode = c.querySelector(':scope > .immersive-translate-target');
+
+    expect(requests).toHaveLength(3);
+    expect(requests[1]).toContain('Paragraph one');
+    expect(requests[2]).toContain('Paragraph two');
+    expect(aNode.textContent).toBe('甲一');
+    expect(bNode.textContent).toBe('甲二');
+    expect(cNode.textContent).toBe('甲三');
+  });
+
   test('does not lose the tail segment when the model emits an extra SEG marker', async () => {
     document.body.innerHTML = `
       <p id="a">Paragraph one is long enough.</p>

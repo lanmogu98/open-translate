@@ -186,6 +186,9 @@ async function translateBatch(batch, llmClient) {
         renderSegment(closedIndex, true);
         if (segmentTexts[closedIndex].trim().length === 0) {
             fallbackIndexes.add(closedIndex);
+            if (lastClosedIndex !== null) {
+                fallbackIndexes.add(lastClosedIndex);
+            }
         }
         lastClosedIndex = closedIndex;
         activeIndex = null;
