@@ -255,6 +255,48 @@ describe('Issue 29: Duplicate Translation in List Items', () => {
       expect(elementsContainingItem1[0].element.id).toBe('item1');
     });
 
+    test('div with direct text AND table cell should not duplicate cell text', () => {
+      document.body.innerHTML = `
+        <div id="outer">
+          Intro before table.
+          <table>
+            <tbody>
+              <tr>
+                <td id="cell">Cell text with enough content to translate.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      `;
+      makeAllVisible('div, table, tbody, tr, td');
+
+      const elements = DOMUtils.getTranslatableElements();
+      const cellText = 'Cell text with enough content to translate.';
+      const elementsContainingCell = elements.filter(e => e.text.includes(cellText));
+
+      expect(elementsContainingCell.length).toBe(1);
+      expect(elementsContainingCell[0].element.id).toBe('cell');
+      expect(elements.find(e => e.element.id === 'outer')).toBeUndefined();
+    });
+
+    test('div with direct text AND nested div should not duplicate nested div text', () => {
+      document.body.innerHTML = `
+        <div id="outer">
+          Lead before nested div.
+          <div id="inner">Nested div text with enough content to translate.</div>
+        </div>
+      `;
+      makeAllVisible('div');
+
+      const elements = DOMUtils.getTranslatableElements();
+      const innerText = 'Nested div text with enough content to translate.';
+      const elementsContainingInner = elements.filter(e => e.text.includes(innerText));
+
+      expect(elementsContainingInner.length).toBe(1);
+      expect(elementsContainingInner[0].element.id).toBe('inner');
+      expect(elements.find(e => e.element.id === 'outer')).toBeUndefined();
+    });
+
     test('div with ONLY direct text (no child elements) SHOULD be translated', () => {
       document.body.innerHTML = `
         <div id="text-only">This div has only direct text content, no child elements at all.</div>
@@ -363,9 +405,7 @@ describe('Issue 29: Duplicate Translation in List Items', () => {
       expect(wrappers.some(w => w.text.includes('Hello World'))).toBe(true);
     });
 
-    test('adjacent text nodes become separate wrappers (text wrapping approach)', () => {
-      // With text wrapping, adjacent text nodes are wrapped individually
-      // Each gets its own span, solving the positioning problem
+    test('adjacent text and inline nodes become one wrapper run before block children', () => {
       document.body.innerHTML = `<div id="adjacent-div">First part here<span>ignored</span>Second part here<ul><li id="item">List item text here</li></ul></div>`;
       makeAllVisible('div, span, ul, li');
 
@@ -376,10 +416,9 @@ describe('Issue 29: Duplicate Translation in List Items', () => {
         e.element.className === 'immersive-translate-text-wrapper'
       );
 
-      // Should have separate wrappers for each text block
-      expect(wrappers.length).toBe(2);
-      expect(wrappers.some(w => w.text.includes('First part'))).toBe(true);
-      expect(wrappers.some(w => w.text.includes('Second part'))).toBe(true);
+      // Inline text is part of the parent run; block children remain separate.
+      expect(wrappers.length).toBe(1);
+      expect(wrappers[0].text).toBe('First part hereignoredSecond part here');
     });
   });
 

@@ -65,22 +65,31 @@ describe('lang-detect', () => {
     });
 
     describe('mixed text handling', () => {
-      test('should detect >30% CJK ratio as "zh"', () => {
+      test('should detect mixed technical text below default threshold as "other"', () => {
         expect(LangDetect).not.toBeNull();
-        // ~40% Chinese characters
-        expect(LangDetect.detectLanguage('使用 API 接口')).toBe('zh');
+        expect(LangDetect.detectLanguage('使用 API 接口')).toBe('other');
       });
 
-      test('should detect <30% CJK ratio as "other"', () => {
+      test('should detect sparse CJK ratio as "other"', () => {
         expect(LangDetect).not.toBeNull();
         // Very few Chinese characters
         expect(LangDetect.detectLanguage('Hello World 你')).toBe('other');
       });
 
-      test('should handle technical docs with English terms in Chinese', () => {
+      test('should not over-skip technical docs with English terms', () => {
         expect(LangDetect).not.toBeNull();
         // Common pattern in tech docs
-        expect(LangDetect.detectLanguage('使用 JavaScript 进行 Web 开发')).toBe('zh');
+        expect(LangDetect.detectLanguage('使用 JavaScript 进行 Web 开发')).toBe('other');
+      });
+
+      test('should allow callers to tune the CJK threshold', () => {
+        expect(LangDetect).not.toBeNull();
+        expect(LangDetect.detectLanguage('使用 API 接口', { cjkThreshold: 0.5 })).toBe('zh');
+      });
+
+      test('should calculate CJK ratio from language characters only', () => {
+        expect(LangDetect).not.toBeNull();
+        expect(LangDetect.getCJKRatio('2024年1月1日')).toBe(1);
       });
     });
 
@@ -142,6 +151,17 @@ describe('lang-detect', () => {
       // This is a limitation of the simple detector
       const result = LangDetect.shouldSkipTranslation('Hello world', 'en');
       expect(typeof result).toBe('boolean');
+    });
+
+    test('should honor language gate disable switch', () => {
+      expect(LangDetect).not.toBeNull();
+      expect(LangDetect.shouldSkipTranslation('这是中文', 'zh', { enabled: false })).toBe(false);
+    });
+
+    test('should honor caller-provided CJK threshold', () => {
+      expect(LangDetect).not.toBeNull();
+      expect(LangDetect.shouldSkipTranslation('使用 API 接口', 'zh', { cjkThreshold: 0.5 })).toBe(true);
+      expect(LangDetect.shouldSkipTranslation('使用 API 接口', 'zh', { cjkThreshold: 0.8 })).toBe(false);
     });
   });
 

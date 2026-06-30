@@ -421,6 +421,10 @@ async function runTranslationProcess() {
             modelTemperatures: {},
             excludedDomains: [],
             excludedSelectors: [],
+            translateAside: false,
+            translateHeaderFooter: false,
+            languageGateEnabled: true,
+            languageGateCJKThreshold: 0.6,
             batchSize: DEFAULT_BATCH_SIZE // Issue 31a
         });
 
@@ -435,6 +439,10 @@ async function runTranslationProcess() {
         const newNodes = DOMUtils.getTranslatableElements({
             excludedSelectors: config.excludedSelectors,
             targetLanguage: config.targetLanguage,
+            translateAside: config.translateAside,
+            translateHeaderFooter: config.translateHeaderFooter,
+            languageGateEnabled: config.languageGateEnabled,
+            languageGateCJKThreshold: config.languageGateCJKThreshold,
             // reserved for Issue 19 future options:
             // translateNavigation: config.translateNavigation,
             // translateShortTexts: config.translateShortTexts,

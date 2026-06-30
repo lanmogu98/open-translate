@@ -2,7 +2,44 @@ const { DOMUtils } = require('../src/utils/dom-utils.js');
 
 global.DOMUtils = DOMUtils;
 
-const { translateBatch } = require('../src/content.js');
+const { runTranslationProcess, translateBatch } = require('../src/content.js');
+
+describe('content scan configuration', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+    delete global.LLMClient;
+  });
+
+  test('forwards scan options from storage to DOMUtils', async () => {
+    chrome.storage.sync.get.mockImplementationOnce((defaults) => Promise.resolve({
+      ...defaults,
+      apiUrl: 'https://api.example.com',
+      apiKey: 'test-key',
+      modelName: 'test-model',
+      targetLanguage: 'zh-CN',
+      excludedSelectors: ['.no-translate'],
+      translateAside: true,
+      translateHeaderFooter: true,
+      languageGateEnabled: false,
+      languageGateCJKThreshold: 0.75,
+    }));
+    global.LLMClient = jest.fn(function LLMClient(config) {
+      this.config = config;
+    });
+    const scanSpy = jest.spyOn(DOMUtils, 'getTranslatableElements').mockReturnValue([]);
+
+    await runTranslationProcess();
+
+    expect(scanSpy).toHaveBeenCalledWith(expect.objectContaining({
+      excludedSelectors: ['.no-translate'],
+      targetLanguage: 'zh-CN',
+      translateAside: true,
+      translateHeaderFooter: true,
+      languageGateEnabled: false,
+      languageGateCJKThreshold: 0.75,
+    }));
+  });
+});
 
 describe('content translateBatch (stream parser)', () => {
   test('routes streamed SEG markers to the matching nodes by explicit index', async () => {
